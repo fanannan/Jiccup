@@ -55,7 +55,7 @@ jiccup.html(['div.card',
 
 ### `jiccup.html(...elements)`
 
-Convert Hiccup data structures to HTML strings.
+Convert Jiccup data structures to HTML strings.
 
 ```javascript
 // Single element
@@ -261,7 +261,7 @@ jiccup.html(['div', {
 
 ## Security
 
-Hiccup.js automatically escapes HTML content to prevent XSS attacks:
+jiccup.js automatically escapes HTML content to prevent XSS attacks:
 
 ```javascript
 const userInput = '<script>alert("XSS")</script>';
@@ -298,7 +298,7 @@ for (let i = 0; i < 1000; i++) {
 
 ### Syntax Differences
 
-| Feature | Clojure Hiccup | Hiccup.js |
+| Feature | Clojure Hiccup | jiccup.js |
 |---------|----------------|-----------|
 | Vectors | `[:div "content"]` | `['div', 'content']` |
 | Keywords | `:div` | `'div'` |
