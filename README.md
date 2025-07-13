@@ -387,7 +387,7 @@ result.attach(document.getElementById('app'));
 
 ## License
 
-MIT License - see LICENSE file for details
+MIT License 
 
 ## Changelog
 
