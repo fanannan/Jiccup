@@ -381,7 +381,6 @@ result.attach(document.getElementById('app'));
 ## Browser Support
 
 - Modern browsers with ES6 module support
-- Chrome 61+, Firefox 60+, Safari 10.1+, Edge 16+
 - Use Babel for legacy browser support
 
 
