@@ -97,16 +97,9 @@ jiccup.html(['div#header.nav.active'])
 jiccup.html(['span.btn.btn-primary.large'])
 // → <span class="btn btn-primary large"></span>
 
-// Enhanced: Flexible order (ID and classes can be in any order)
+// Flexible order (ID and classes can be in any order)
 jiccup.html(['div.container.active#main'])
 // → <div id="main" class="container active"></div>
-
-jiccup.html(['div.header#main.sticky.top'])
-// → <div id="main" class="header sticky top"></div>
-
-// Example from user request
-jiccup.html(['div.xxx.ttt.yyyy.zzz#identifier'])
-// → <div id="identifier" class="xxx ttt yyyy zzz"></div>
 ```
 
 ### Attributes
