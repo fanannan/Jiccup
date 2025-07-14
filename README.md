@@ -1,6 +1,6 @@
 # Jiccup
 
-A simplified JavaScript implementation of the Clojure Hiccup library (https://github.com/weavejester/jiccup) for generating HTML using data structures. Write HTML using JavaScript arrays and objects with a clean, functional approach.
+A simplified JavaScript implementation of the Clojure Hiccup library (https://github.com/weavejester/jiccup) for generating HTML using data structures. Write HTML using JavaScript arrays and objects with a clean, functional approach. This code was generated with the help of Claude Code.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -15,6 +15,7 @@ A simplified JavaScript implementation of the Clojure Hiccup library (https://gi
 - 📦 **ES6 Modules** - Modern JavaScript module system
 - 🎭 **Event Handling** - Built-in event binding with `on:` prefix
 - 🔄 **Conditional Rendering** - Smart handling of falsy values
+- 🏷️ **Flexible Selectors** - CSS-style selectors with ID and classes in any order
 
 ## Installation
 
@@ -95,6 +96,17 @@ jiccup.html(['div#header.nav.active'])
 // Multiple classes
 jiccup.html(['span.btn.btn-primary.large'])
 // → <span class="btn btn-primary large"></span>
+
+// Enhanced: Flexible order (ID and classes can be in any order)
+jiccup.html(['div.container.active#main'])
+// → <div id="main" class="container active"></div>
+
+jiccup.html(['div.header#main.sticky.top'])
+// → <div id="main" class="header sticky top"></div>
+
+// Example from user request
+jiccup.html(['div.xxx.ttt.yyyy.zzz#identifier'])
+// → <div id="identifier" class="xxx ttt yyyy zzz"></div>
 ```
 
 ### Attributes
@@ -389,6 +401,12 @@ result.attach(document.getElementById('app'));
 MIT License 
 
 ## Changelog
+
+### v1.1.0
+- Enhanced parseTag function to support flexible CSS-style selectors
+- ID and classes can now be specified in any order (e.g., `div.class1#id.class2`)
+- Added comprehensive unit tests for parseTag functionality
+- Improved performance with caching optimizations
 
 ### v1.0.0
 - Initial release

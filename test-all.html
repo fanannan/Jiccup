@@ -90,11 +90,13 @@
 </head>
 <body>
     <h1>Jiccup.js Complete Test Suite</h1>
+    <p>Including enhanced parseTag function tests for flexible CSS selector support</p>
     
     <div class="controls">
         <button onclick="runAllTests()">Run All Tests</button>
         <button onclick="runBasicTests()">Run Basic Tests Only</button>
         <button onclick="runExtendedTests()">Run Extended Tests Only</button>
+        <button onclick="runParseTagTests()">Run parseTag Tests Only</button>
         <button onclick="clearOutput()">Clear Output</button>
     </div>
     
@@ -250,7 +252,7 @@
         
         window.runAllTests = async () => {
             output.innerHTML = '';
-            await runTests(['./jiccup.test.js', './jiccup-extended.test.js']);
+            await runTests(['./jiccup.test.js', './jiccup-extended.test.js', './jiccup-parseTag.test.js']);
         };
         
         window.runBasicTests = async () => {
@@ -261,6 +263,11 @@
         window.runExtendedTests = async () => {
             output.innerHTML = '';
             await runTests(['./jiccup-extended.test.js']);
+        };
+        
+        window.runParseTagTests = async () => {
+            output.innerHTML = '';
+            await runTests(['./jiccup-parseTag.test.js']);
         };
         
         window.clearOutput = () => {

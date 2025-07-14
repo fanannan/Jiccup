@@ -453,7 +453,7 @@ test('Invalid tag name throws error', () => {
 test('Tag with spaces throws error', () => {
     assertThrows(
         () => jiccup.html(['div class="bad"', 'Content']),
-        'Invalid tag name'
+        'Invalid tag format - spaces not allowed'
     );
 });
 
@@ -475,7 +475,7 @@ test('Very deep nesting (near limit)', () => {
 test('Empty string tag name', () => {
     assertThrows(
         () => jiccup.html(['', 'Content']),
-        'Invalid tag name'
+        'Invalid tag format'
     );
 });
 

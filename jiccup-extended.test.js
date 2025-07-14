@@ -66,22 +66,22 @@ console.log('=== Tag parsing edge cases ===');
 test('Invalid tag starting with ID throws error', () => {
     assertThrows(
         () => jiccup.html(['#onlyId']),
-        'Invalid tag name'
+        'Invalid tag format'
     );
 });
 
 test('Invalid tag starting with class throws error', () => {
     assertThrows(
         () => jiccup.html(['.onlyClass']),
-        'Invalid tag name'
+        'Invalid tag format'
     );
 });
 
 test('Tag with multiple # chars in ID', () => {
-    // The regex captures everything after the first # as the ID value
-    assertEquals(
-        jiccup.html(['div#first#second#third', 'Content']),
-        '<div id="first#second#third">Content</div>'
+    // The enhanced parseTag now throws an error for multiple IDs
+    assertThrows(
+        () => jiccup.html(['div#first#second#third', 'Content']),
+        'Multiple IDs not allowed'
     );
 });
 
@@ -100,10 +100,10 @@ test('Tag with hyphenated names', () => {
 });
 
 test('Empty class segments create spaces', () => {
-    // The regex replaces . with space, creating multiple spaces for consecutive dots
-    assertEquals(
-        jiccup.html(['div...class1...class2...', 'Content']),
-        '<div class="  class1   class2   ">Content</div>'
+    // The enhanced parseTag now validates against empty class segments
+    assertThrows(
+        () => jiccup.html(['div...class1...class2...', 'Content']),
+        'Invalid tag format'
     );
 });
 
@@ -586,7 +586,7 @@ console.log('\n=== Error edge cases ===');
 test('Tag name with script tags', () => {
     assertThrows(
         () => jiccup.html(['<img src=x onerror=alert(1)>', 'XSS']),
-        'Invalid tag name'
+        'Invalid tag format - spaces not allowed'
     );
 });
 
@@ -607,7 +607,7 @@ test('Tag name starting with number', () => {
 test('Whitespace in tag shorthand', () => {
     assertThrows(
         () => jiccup.html(['div #id', 'Bad']),
-        'Invalid tag name'
+        'Invalid tag format - spaces not allowed'
     );
 });
 

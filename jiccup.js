@@ -24,16 +24,56 @@
  * // => '<p>This is a paragraph</p>'
  * ```
  * 
- * ### 2. ID and Class Shorthand Notation
+ * ### 2. Enhanced ID and Class Shorthand Notation
+ * The jiccup library supports flexible CSS-style selectors with multiple classes
+ * and IDs in any order (though only one ID is allowed per tag).
+ * 
  * ```javascript
+ * // Basic ID and class
  * jiccup.html(['div#main', 'Content'])
  * // => '<div id="main">Content</div>'
  * 
  * jiccup.html(['div.container', 'Content'])
  * // => '<div class="container">Content</div>'
  * 
+ * // Multiple classes
+ * jiccup.html(['div.container.active.primary', 'Content'])
+ * // => '<div class="container active primary">Content</div>'
+ * 
+ * // Hiccup style: ID then classes
  * jiccup.html(['div#main.container.active', 'Content'])
  * // => '<div id="main" class="container active">Content</div>'
+ * 
+ * // CSS style: classes then ID
+ * jiccup.html(['div.container.active#main', 'Content'])
+ * // => '<div id="main" class="container active">Content</div>'
+ * 
+ * // Mixed order: classes, ID, more classes
+ * jiccup.html(['div.header#main.sticky.top', 'Content'])
+ * // => '<div id="main" class="header sticky top">Content</div>'
+ * 
+ * // Many classes with ID (user's example)
+ * jiccup.html(['div.xxx.ttt.yyyy.zzz#identifier', 'Content'])
+ * // => '<div id="identifier" class="xxx ttt yyyy zzz">Content</div>'
+ * ```
+ * 
+ * ### Invalid Formats (will throw JiccupError)
+ * ```javascript
+ * // Spaces not allowed
+ * jiccup.html(['div .class', 'Content']) // ✗ Error
+ * jiccup.html(['div# id', 'Content'])    // ✗ Error
+ * 
+ * // Multiple IDs not allowed  
+ * jiccup.html(['div#id1#id2', 'Content']) // ✗ Error
+ * 
+ * // Empty selectors not allowed
+ * jiccup.html(['div#', 'Content'])  // ✗ Error
+ * jiccup.html(['div.', 'Content'])  // ✗ Error
+ * jiccup.html(['div..class', 'Content']) // ✗ Error
+ * 
+ * // Invalid tag names
+ * jiccup.html(['123div', 'Content'])     // ✗ Error
+ * jiccup.html(['div-@#$', 'Content'])    // ✗ Error
  * ```
  * 
  * ### 3. Attribute Specification
@@ -780,29 +820,93 @@ function validateTagName(tagName) {
 
 /**
  * Parse tag string and split into tag name and attributes
- * @param {string} tag - Tag string (e.g., "div#id.class1.class2")
+ * Supports flexible CSS-style selectors with classes and ID in any order
+ * @param {string} tag - Tag string (e.g., "div#id.class1.class2" or "div.class1.class2#id")
  * @returns {[string, Object<string, string>]} [tag name, attributes object]
+ * @throws {JiccupError} If invalid format, multiple IDs, or spaces in tag
  */
 function parseTag(tag) {
-    // Check cache
+    // Check cache first
     const cached = getCachedTag(tag);
     if (cached) return cached;
     
-    const match = tag.match(CONSTANTS.TAG_PATTERN);
-    if (!match) {
-        validateTagName(tag); // Validate tag name
-        setCachedTag(tag, tag, {});
-        return [tag, {}];
+    // Validate no spaces (invalid in tag selectors)
+    if (/\s/.test(tag)) {
+        throw new JiccupError(
+            `Invalid tag format - spaces not allowed: "${tag}"`,
+            ERROR_CODES.INVALID_TAG_NAME,
+            { tag }
+        );
     }
     
-    const tagName = match[1];
-    validateTagName(tagName); // Validate tag name
+    // Extract tag name (everything before first # or .)
+    const tagMatch = tag.match(/^([^#.]+)/);
+    if (!tagMatch) {
+        throw new JiccupError(
+            `Invalid tag format: "${tag}"`,
+            ERROR_CODES.INVALID_TAG_NAME,
+            { tag }
+        );
+    }
+    
+    const tagName = tagMatch[1];
+    validateTagName(tagName);
+    
+    // Extract all selector parts (# and . segments)
+    const remaining = tag.substring(tagName.length);
+    
+    // Match # or . followed by non-# non-. characters
+    const selectorParts = remaining.match(/(#[^#.]+|\.[^#.]+)/g) || [];
+    
+    // Validate that we consumed the entire string
+    const consumed = tagName + selectorParts.join('');
+    if (consumed !== tag) {
+        throw new JiccupError(
+            `Invalid tag format: "${tag}"`,
+            ERROR_CODES.INVALID_TAG_NAME,
+            { tag, issue: 'unparseable characters' }
+        );
+    }
     
     const attrs = {};
+    const classes = [];
+    let hasId = false;
     
-    // Process ID and class in one line
-    if (match[2]) attrs[CONSTANTS.ID] = match[2].substring(1);
-    if (match[3]) attrs[CONSTANTS.CLASS] = match[3].substring(1).replace(CONSTANTS.CLASS_SEPARATOR, CONSTANTS.SPACE);
+    for (const part of selectorParts) {
+        if (part.startsWith('#')) {
+            if (hasId) {
+                throw new JiccupError(
+                    `Multiple IDs not allowed: "${tag}"`,
+                    ERROR_CODES.INVALID_TAG_NAME,
+                    { tag, duplicate: part }
+                );
+            }
+            const idValue = part.substring(1);
+            if (!idValue) {
+                throw new JiccupError(
+                    `Empty ID not allowed: "${tag}"`,
+                    ERROR_CODES.INVALID_TAG_NAME,
+                    { tag }
+                );
+            }
+            attrs[CONSTANTS.ID] = idValue;
+            hasId = true;
+        } else if (part.startsWith('.')) {
+            const className = part.substring(1);
+            if (!className) {
+                throw new JiccupError(
+                    `Empty class not allowed: "${tag}"`,
+                    ERROR_CODES.INVALID_TAG_NAME,
+                    { tag }
+                );
+            }
+            classes.push(className);
+        }
+    }
+    
+    if (classes.length > 0) {
+        attrs[CONSTANTS.CLASS] = classes.join(' ');
+    }
     
     setCachedTag(tag, tagName, attrs);
     return [tagName, attrs];
@@ -841,3 +945,16 @@ const jiccup = {
 
 // ES6 module export
 export { jiccup };
+
+// Test exports (only available when explicitly importing for tests)
+// These exports are used by unit tests to access internal functions
+export const __testExports = {
+    parseTag,
+    JiccupError,
+    ERROR_CODES,
+    CONSTANTS,
+    validateTagName,
+    getCachedTag,
+    setCachedTag,
+    tagCache
+};
