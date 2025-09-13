@@ -378,11 +378,75 @@ function normalizeInput(args) {
  * @returns {string} HTML string
  */
 function html(...args) {
-    const buffer = [];
-    const input = normalizeInput(args);
-    
-    processElement(input, buffer);
-    return buffer.join('');
+    // スタックトレース情報を収集（デバッグ用）
+    const startTime = performance.now();
+    const callStack = new Error().stack;
+
+    try {
+        const buffer = [];
+        const input = normalizeInput(args);
+
+        // 詳細ログ出力（デバッグモード時）
+        if (typeof console !== 'undefined' && console.debug && jiccup.debugMode) {
+            console.debug('[Jiccup] html() 呼び出し開始', {
+                args,
+                normalizedInput: input,
+                inputType: typeof input,
+                isArray: Array.isArray(input),
+                timestamp: new Date().toISOString(),
+                callStack: callStack?.split('\n').slice(0, 5) // 最初の5行のみ
+            });
+        }
+
+        processElement(input, buffer);
+        const result = buffer.join('');
+
+        const endTime = performance.now();
+        const processingTime = endTime - startTime;
+
+        // 詳細ログ出力（デバッグモード時）
+        if (typeof console !== 'undefined' && console.debug && jiccup.debugMode) {
+            console.debug('[Jiccup] html() 呼び出し完了', {
+                result: result.substring(0, 200) + (result.length > 200 ? '...' : ''),
+                resultLength: result.length,
+                processingTime: `${processingTime.toFixed(3)}ms`,
+                bufferSize: buffer.length
+            });
+        }
+
+        return result;
+
+    } catch (error) {
+        const endTime = performance.now();
+        const processingTime = endTime - startTime;
+
+        // エラー時の詳細情報を追加
+        if (error instanceof JiccupError) {
+            // JiccupErrorの場合、呼び出し情報を追加
+            error.context = {
+                ...error.context,
+                htmlCallInfo: {
+                    args,
+                    processingTime: `${processingTime.toFixed(3)}ms`,
+                    originalStack: callStack,
+                    timestamp: new Date().toISOString()
+                }
+            };
+        }
+
+        // エラーログ出力
+        if (typeof console !== 'undefined' && console.error) {
+            console.error('[Jiccup] html() 呼び出し中にエラーが発生', {
+                error: error.message,
+                args,
+                processingTime: `${processingTime.toFixed(3)}ms`,
+                callStack: callStack?.split('\n').slice(0, 10),
+                errorType: error.constructor.name
+            });
+        }
+
+        throw error;
+    }
 }
 
 /**
@@ -469,38 +533,167 @@ function processElement(element, buffer) {
 }
 
 /**
- * Generate error for null/undefined values
+ * Generate error for null/undefined values with comprehensive diagnostics
  * @param {any} value - Value to check
  * @param {string} errorType - Error type ('element' or 'attribute')
  * @param {string} [key] - Attribute name (for attributes)
+ * @param {any} [parentElement] - Parent element for context
+ * @param {number} [arrayIndex] - Array index if element is in array
  * @returns {void}
  * @throws {JiccupError} If null/undefined
  */
-function throwIfNullOrUndefined(value, errorType, key) {
+function throwIfNullOrUndefined(value, errorType, key, parentElement, arrayIndex) {
     const isNull = value === null;
     const isUndefined = value === undefined;
-    
+
     if (!isNull && !isUndefined) return;
-    
+
+    // スタックトレース情報を収集
+    const error = new Error();
+    const stackLines = error.stack ? error.stack.split('\n') : [];
+
+    // 呼び出し元の特定（jiccup.js以外の最初の行を探す）
+    let callerInfo = null;
+    for (let i = 1; i < stackLines.length; i++) {
+        const line = stackLines[i];
+        if (line && !line.includes('jiccup.js')) {
+            const match = line.match(/at\s+([^\s]+)\s+\(([^:]+):(\d+):(\d+)\)|at\s+([^:]+):(\d+):(\d+)/);
+            if (match) {
+                callerInfo = {
+                    function: match[1] || 'anonymous',
+                    file: match[2] || match[5],
+                    line: parseInt(match[3] || match[6]),
+                    column: parseInt(match[4] || match[7])
+                };
+            }
+            break;
+        }
+    }
+
+    // 親要素の詳細情報を生成
+    let parentInfo = null;
+    if (parentElement) {
+        try {
+            parentInfo = {
+                type: Array.isArray(parentElement) ? 'array' : typeof parentElement,
+                isArray: Array.isArray(parentElement),
+                length: Array.isArray(parentElement) ? parentElement.length : null,
+                firstElement: Array.isArray(parentElement) ? parentElement[0] : null,
+                preview: Array.isArray(parentElement)
+                    ? `[${parentElement.slice(0, 3).map(el =>
+                        typeof el === 'string' ? `"${el.substring(0, 20)}"` :
+                        Array.isArray(el) ? '[Array]' : String(el)
+                    ).join(', ')}${parentElement.length > 3 ? '...' : ''}]`
+                    : String(parentElement).substring(0, 100)
+            };
+        } catch (e) {
+            parentInfo = { error: 'Failed to analyze parent element: ' + e.message };
+        }
+    }
+
+    // 詳細な診断情報を含むコンテキストを作成
+    const diagnostics = {
+        // 基本情報
+        valueType: isNull ? 'null' : 'undefined',
+        errorType,
+        arrayIndex,
+        key,
+
+        // 呼び出し元情報
+        caller: callerInfo,
+
+        // 親要素情報
+        parent: parentInfo,
+
+        // 完全なスタックトレース
+        fullStack: stackLines.slice(1, 10), // 最初の10行のみ
+
+        // データ構造の詳細
+        context: {
+            timestamp: new Date().toISOString(),
+            processDepth: stackLines.filter(line => line.includes('jiccup.js')).length,
+            jiccupCallChain: stackLines
+                .filter(line => line.includes('jiccup.js'))
+                .map(line => {
+                    const match = line.match(/at\s+([^\s]+)/);
+                    return match ? match[1] : line.trim();
+                })
+        },
+
+        // デバッグ用のデータダンプ
+        dataDump: {
+            attemptedValue: value,
+            parentElementExists: !!parentElement,
+            hasKey: !!key,
+            hasArrayIndex: arrayIndex !== undefined
+        }
+    };
+
     const isAttribute = errorType === 'attribute';
     const errorCode = isNull ? ERROR_CODES.NULL_VALUE : ERROR_CODES.UNDEFINED_VALUE;
-    const message = isAttribute
+
+    // 改良されたエラーメッセージ（診断情報を含む）
+    let enhancedMessage = isAttribute
         ? (isNull ? CONSTANTS.ERROR_ATTR_NULL(key) : CONSTANTS.ERROR_ATTR_UNDEFINED(key))
         : (isNull ? CONSTANTS.ERROR_NULL : CONSTANTS.ERROR_UNDEFINED);
-    const context = isAttribute ? { key, value } : { element: value };
-    
-    throw new JiccupError(message, errorCode, context);
+
+    // 診断情報を追加
+    enhancedMessage += '\n\n=== 詳細診断情報 ===';
+
+    if (callerInfo) {
+        enhancedMessage += `\n呼び出し元: ${callerInfo.function} (${callerInfo.file}:${callerInfo.line}:${callerInfo.column})`;
+    }
+
+    if (arrayIndex !== undefined) {
+        enhancedMessage += `\n配列インデックス: ${arrayIndex}`;
+    }
+
+    if (parentInfo) {
+        enhancedMessage += `\n親要素: ${parentInfo.type}`;
+        if (parentInfo.isArray) {
+            enhancedMessage += ` (長さ: ${parentInfo.length})`;
+        }
+        enhancedMessage += `\n親要素プレビュー: ${parentInfo.preview}`;
+    }
+
+    enhancedMessage += `\n処理の深度: ${diagnostics.context.processDepth}`;
+    enhancedMessage += `\nJiccup呼び出しチェーン: ${diagnostics.context.jiccupCallChain.join(' -> ')}`;
+
+    const context = isAttribute ? { key, value, diagnostics } : { element: value, diagnostics };
+
+    throw new JiccupError(enhancedMessage, errorCode, context);
 }
 
 /**
- * Validate element (null/undefined/false check)
+ * Validate element (null/undefined/false check) with detailed diagnostics
  * @param {any} element - Element to validate
+ * @param {any} [parentElement] - Parent element for context
+ * @param {number} [arrayIndex] - Array index if element is in array
  * @returns {boolean} true if processing should continue
  * @throws {JiccupError} If null/undefined
  */
-function validateElement(element) {
-    throwIfNullOrUndefined(element, 'element');
-    return element !== false;
+function validateElement(element, parentElement, arrayIndex) {
+    // 詳細な診断情報付きでnull/undefined チェックを実行
+    throwIfNullOrUndefined(element, 'element', null, parentElement, arrayIndex);
+
+    // falseの場合は処理をスキップ（エラーは発生させない）
+    const shouldContinue = element !== false;
+
+    // デバッグ情報のログ出力（開発時のみ）
+    if (typeof console !== 'undefined' && console.debug) {
+        if (!shouldContinue) {
+            console.debug('[Jiccup Debug] validateElement: 要素がfalseのため処理をスキップ', {
+                element,
+                parentElement: parentElement || 'N/A',
+                arrayIndex: arrayIndex || 'N/A',
+                elementType: typeof element,
+                shouldContinue,
+                stackTrace: new Error().stack
+            });
+        }
+    }
+
+    return shouldContinue;
 }
 
 /**
@@ -651,7 +844,15 @@ function appendCloseTag(tagName, buffer) {
  * @returns {void}
  */
 function processChildren(children, buffer, context, depth) {
-    children.forEach(child => processElementWithContext(child, buffer, context, depth + 1));
+    children.forEach((child, index) => {
+        // 子要素の処理時に配列インデックス情報を含むコンテキストを作成
+        const childContext = {
+            ...context,
+            parent: children,
+            arrayIndex: index
+        };
+        processElementWithContext(child, buffer, childContext, depth + 1);
+    });
 }
 
 /**
@@ -736,8 +937,8 @@ function processElementWithContext(element, buffer, context = null, depth = 0) {
         );
     }
     
-    // Validate element
-    if (!validateElement(element)) {
+    // Validate element with enhanced diagnostics
+    if (!validateElement(element, context?.parent, context?.arrayIndex)) {
         return; // Ignore if false
     }
     
@@ -931,14 +1132,80 @@ const jiccup = {
     render,
     fragment,
     escapeHtml,
-    
+
+    // デバッグ機能
+    debugMode: false,
+
+    // デバッグモード制御
+    enableDebugMode() {
+        this.debugMode = true;
+        if (typeof console !== 'undefined' && console.info) {
+            console.info('[Jiccup] デバッグモードが有効になりました。詳細なログとエラー診断が表示されます。');
+        }
+        return this;
+    },
+
+    disableDebugMode() {
+        this.debugMode = false;
+        if (typeof console !== 'undefined' && console.info) {
+            console.info('[Jiccup] デバッグモードが無効になりました。');
+        }
+        return this;
+    },
+
+    // デバッグ情報取得
+    getDebugInfo() {
+        return {
+            debugMode: this.debugMode,
+            version: '1.0.0',
+            cacheSize: Object.keys(tagCache).length,
+            constants: CONSTANTS,
+            performance: {
+                tagCacheEnabled: true,
+                maxNestingDepth: 100,
+                maxCacheSize: 1000
+            }
+        };
+    },
+
+    // エラー報告機能
+    reportError(element, context = {}) {
+        try {
+            const error = new Error();
+            const callStack = error.stack;
+
+            const report = {
+                timestamp: new Date().toISOString(),
+                element,
+                context,
+                debugMode: this.debugMode,
+                callStack: callStack?.split('\n').slice(0, 10),
+                systemInfo: {
+                    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'N/A',
+                    platform: typeof navigator !== 'undefined' ? navigator.platform : 'N/A'
+                }
+            };
+
+            if (typeof console !== 'undefined' && console.warn) {
+                console.warn('[Jiccup] エラー報告:', report);
+            }
+
+            return report;
+        } catch (e) {
+            if (typeof console !== 'undefined' && console.error) {
+                console.error('[Jiccup] エラー報告の生成に失敗:', e);
+            }
+            return null;
+        }
+    },
+
     // Cleanup utility
     cleanup(container) {
         const element = getContainer(container);
         element.innerHTML = ''; // This also removes existing event listeners
         return element;
     },
-    
+
     // Also export constants (use as needed)
     CONSTANTS
 };
