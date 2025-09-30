@@ -288,7 +288,7 @@ test('Mapped array', () => {
 
 test('Conditional rendering - false is ignored', () => {
     assertEquals(
-        jiccup.html(['div', false && ['span', 'Hidden'], ['span', 'Visible']]),
+        jiccup.html(['div', false & ['span', 'Hidden'], ['span', 'Visible']]),
         '<div><span>Visible</span></div>'
     );
 });
@@ -364,7 +364,7 @@ test('Array classes', () => {
 
 test('Array classes with conditionals', () => {
     assertEquals(
-        jiccup.html(['div', {class: ['btn', false && 'hidden', 'active'].filter(Boolean)}, 'Button']),
+        jiccup.html(['div', {class: ['btn', false & 'hidden', 'active'].filter(Boolean)}, 'Button']),
         '<div class="btn active">Button</div>'
     );
 });
@@ -596,7 +596,7 @@ test('Fragment with mixed content', () => {
     const result = jiccup.html(
         jiccup.fragment(
             ['h1', 'Title'],
-            false && ['p', 'Hidden'],
+            false & ['p', 'Hidden'],
             ['p', 'Visible']
         )
     );

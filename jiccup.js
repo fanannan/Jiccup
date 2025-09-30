@@ -1121,7 +1121,7 @@ function parseTag(tag) {
  * @returns {boolean} true if plain object
  */
 function isPlainObject(obj) {
-    return obj != null && 
+    return obj !== null &&
            typeof obj === 'object' && 
            obj.constructor === Object;
 }
