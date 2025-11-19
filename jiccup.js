@@ -529,7 +529,13 @@ function render(...args) {
  * @returns {void}
  */
 function processElement(element, buffer) {
-    processElementWithContext(element, buffer, null);
+    const initialContext = {
+        path: ['root'],
+        parent: null,
+        arrayIndex: null,
+        rootElement: element
+    };
+    processElementWithContext(element, buffer, initialContext);
 }
 
 /**
@@ -542,7 +548,7 @@ function processElement(element, buffer) {
  * @returns {void}
  * @throws {JiccupError} If null/undefined
  */
-function throwIfNullOrUndefined(value, errorType, key, parentElement, arrayIndex) {
+function throwIfNullOrUndefined(value, errorType, key, parentElement, arrayIndex, pathSegments = [], rootElement = null) {
     const isNull = value === null;
     const isUndefined = value === undefined;
 
@@ -625,7 +631,8 @@ function throwIfNullOrUndefined(value, errorType, key, parentElement, arrayIndex
             attemptedValue: value,
             parentElementExists: !!parentElement,
             hasKey: !!key,
-            hasArrayIndex: arrayIndex !== undefined
+            hasArrayIndex: arrayIndex !== undefined,
+            rootPreview: rootElement ? summarizeElement(rootElement) : undefined
         }
     };
 
@@ -656,12 +663,42 @@ function throwIfNullOrUndefined(value, errorType, key, parentElement, arrayIndex
         enhancedMessage += `\n親要素プレビュー: ${parentInfo.preview}`;
     }
 
+    if (pathSegments && pathSegments.length > 0) {
+        enhancedMessage += `\n要素パス: ${pathSegments.join(' > ')}`;
+    }
+
     enhancedMessage += `\n処理の深度: ${diagnostics.context.processDepth}`;
     enhancedMessage += `\nJiccup呼び出しチェーン: ${diagnostics.context.jiccupCallChain.join(' -> ')}`;
 
     const context = isAttribute ? { key, value, diagnostics } : { element: value, diagnostics };
 
     throw new JiccupError(enhancedMessage, errorCode, context);
+}
+
+/**
+ * Create a concise summary string for logging elements
+ * @param {any} element - Element or value to summarize
+ * @returns {string} summary text
+ */
+function summarizeElement(element) {
+    try {
+        if (Array.isArray(element)) {
+            const head = element[0];
+            if (typeof head === 'string') {
+                return `[${head} ...]`;
+            }
+            if (typeof head === 'function') {
+                return `[component:${head.name || 'anonymous'} ...]`;
+            }
+            return '[array]';
+        }
+        if (typeof element === 'object') {
+            return JSON.stringify(element).substring(0, 60);
+        }
+        return String(element);
+    } catch (error) {
+        return `unavailable(${error.message})`;
+    }
 }
 
 /**
@@ -672,9 +709,9 @@ function throwIfNullOrUndefined(value, errorType, key, parentElement, arrayIndex
  * @returns {boolean} true if processing should continue
  * @throws {JiccupError} If null/undefined
  */
-function validateElement(element, parentElement, arrayIndex) {
+function validateElement(element, parentElement, arrayIndex, pathSegments, rootElement) {
     // 詳細な診断情報付きでnull/undefined チェックを実行
-    throwIfNullOrUndefined(element, 'element', null, parentElement, arrayIndex);
+    throwIfNullOrUndefined(element, 'element', null, parentElement, arrayIndex, pathSegments, rootElement);
 
     // falseの場合は処理をスキップ（エラーは発生させない）
     const shouldContinue = element !== false;
@@ -779,8 +816,8 @@ function processAttributes(rawAttrs, context) {
  * @returns {boolean} true if attribute should be added
  * @throws {JiccupError} If null/undefined
  */
-function validateAttributeValue(key, value) {
-    throwIfNullOrUndefined(value, 'attribute', key);
+function validateAttributeValue(key, value, pathSegments = [], rootElement = null) {
+    throwIfNullOrUndefined(value, 'attribute', key, null, undefined, pathSegments, rootElement);
     return value !== false; // Don't add attribute if false
 }
 
@@ -790,9 +827,10 @@ function validateAttributeValue(key, value) {
  * @param {Array<string>} buffer - Buffer to accumulate HTML strings
  * @returns {void}
  */
-function appendAttributes(attrs, buffer) {
+function appendAttributes(attrs, buffer, pathSegments = [], rootElement = null) {
     for (const [key, value] of Object.entries(attrs)) {
-        if (!validateAttributeValue(key, value)) {
+        const attributePath = buildAttributePath(pathSegments, key);
+        if (!validateAttributeValue(key, value, attributePath, rootElement)) {
             continue; // Skip if false
         }
         
@@ -810,6 +848,11 @@ function appendAttributes(attrs, buffer) {
     }
 }
 
+function buildAttributePath(pathSegments, key) {
+    const base = Array.isArray(pathSegments) && pathSegments.length > 0 ? pathSegments : ['root'];
+    return [...base, `@${key}`];
+}
+
 /**
  * Generate opening tag and append to buffer
  * @param {string} tagName - Tag name
@@ -817,10 +860,10 @@ function appendAttributes(attrs, buffer) {
  * @param {Array<string>} buffer - Buffer to accumulate HTML strings
  * @returns {void}
  */
-function appendOpenTag(tagName, attrs, buffer) {
+function appendOpenTag(tagName, attrs, buffer, pathSegments = [], rootElement = null) {
     buffer.push(CONSTANTS.TAG_OPEN, tagName);
     
-    appendAttributes(attrs, buffer);
+    appendAttributes(attrs, buffer, pathSegments, rootElement);
     
     buffer.push(CONSTANTS.TAG_CLOSE);
 }
@@ -846,13 +889,38 @@ function appendCloseTag(tagName, buffer) {
 function processChildren(children, buffer, context, depth) {
     children.forEach((child, index) => {
         // 子要素の処理時に配列インデックス情報を含むコンテキストを作成
+        const parentPath = context?.path || ['root'];
         const childContext = {
-            ...context,
+            ...(context || {}),
             parent: children,
-            arrayIndex: index
+            arrayIndex: index,
+            path: buildChildPath(parentPath, child, index),
+            rootElement: context?.rootElement || child
         };
         processElementWithContext(child, buffer, childContext, depth + 1);
     });
+}
+
+function buildChildPath(parentPath, child, index) {
+    const normalizedParent = Array.isArray(parentPath) && parentPath.length > 0 ? parentPath : ['root'];
+    return [...normalizedParent, describeElementForPath(child, index)];
+}
+
+function describeElementForPath(element, index) {
+    if (Array.isArray(element)) {
+        const head = element[0];
+        if (typeof head === 'string') {
+            return `${head}[${index}]`;
+        }
+        if (typeof head === 'function') {
+            return `component:${head.name || 'anonymous'}[${index}]`;
+        }
+        return `fragment[${index}]`;
+    }
+    if (typeof element === 'string') {
+        return `text[${index}]`;
+    }
+    return `${typeof element}[${index}]`;
 }
 
 /**
@@ -899,7 +967,7 @@ function processHtmlTag(element, buffer, context, depth) {
     delete attrs[CONSTANTS.DANGEROUS_HTML];
     
     // Add opening tag
-    appendOpenTag(tagName, attrs, buffer);
+    appendOpenTag(tagName, attrs, buffer, context?.path, context?.rootElement);
     
     // No closing tag for void elements
     if (VOID_ELEMENTS.has(tagName)) {
@@ -938,7 +1006,14 @@ function processElementWithContext(element, buffer, context = null, depth = 0) {
     }
     
     // Validate element with enhanced diagnostics
-    if (!validateElement(element, context?.parent, context?.arrayIndex)) {
+    const effectiveContext = context || {
+        path: ['root'],
+        parent: null,
+        arrayIndex: null,
+        rootElement: element
+    };
+    
+    if (!validateElement(element, effectiveContext.parent, effectiveContext.arrayIndex, effectiveContext.path, effectiveContext.rootElement)) {
         return; // Ignore if false
     }
     
@@ -953,7 +1028,7 @@ function processElementWithContext(element, buffer, context = null, depth = 0) {
     }
     
     // Process components
-    if (processComponent(element, buffer, context, depth)) {
+    if (processComponent(element, buffer, effectiveContext, depth)) {
         return;
     }
     
@@ -961,19 +1036,19 @@ function processElementWithContext(element, buffer, context = null, depth = 0) {
     
     // If first element is not a string, process as array auto-expansion
     if (typeof first !== 'string') {
-        processChildren(element, buffer, context, depth);
+        processChildren(element, buffer, effectiveContext, depth);
         return;
     }
     
     // Process Fragment
     if (first === CONSTANTS.FRAGMENT) {
         const children = element.slice(1);
-        processChildren(children, buffer, context, depth);
+        processChildren(children, buffer, effectiveContext, depth);
         return;
     }
     
     // Process normal tag
-    processHtmlTag(element, buffer, context, depth);
+    processHtmlTag(element, buffer, effectiveContext, depth);
 }
 
 /**
