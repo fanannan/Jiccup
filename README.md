@@ -162,8 +162,8 @@ Create reusable components with functions:
 
 ```javascript
 // Define component
-const Card = ({title, content, variant = 'default'}) => 
-  ['div', {class: `card card-${variant}`},
+const Card = ({title, content, theme = 'default'}) =>
+  ['div', {class: `card card-${theme}`},
     ['h3', {class: 'card-title'}, title],
     ['div', {class: 'card-body'}, content]
   ];
@@ -172,7 +172,7 @@ const Card = ({title, content, variant = 'default'}) =>
 jiccup.html([Card, {
   title: 'Welcome',
   content: 'This is a card component',
-  variant: 'primary'
+  theme: 'primary'
 }])
 // → <div class="card card-primary"><h3 class="card-title">Welcome</h3><div class="card-body">This is a card component</div></div>
 ```
