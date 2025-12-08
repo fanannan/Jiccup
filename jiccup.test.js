@@ -288,7 +288,7 @@ test('Mapped array', () => {
 
 test('Conditional rendering - false is ignored', () => {
     assertEquals(
-        jiccup.html(['div', false & ['span', 'Hidden'], ['span', 'Visible']]),
+        jiccup.html(['div', false && ['span', 'Hidden'], ['span', 'Visible']]),
         '<div><span>Visible</span></div>'
     );
 });
@@ -599,7 +599,7 @@ test('Fragment with mixed content', () => {
     const result = jiccup.html(
         jiccup.fragment(
             ['h1', 'Title'],
-            false & ['p', 'Hidden'],
+            false && ['p', 'Hidden'],
             ['p', 'Visible']
         )
     );
