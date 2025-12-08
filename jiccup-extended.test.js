@@ -668,9 +668,8 @@ test('CONSTANTS object is exported', () => {
 });
 
 test('Error messages in CONSTANTS', () => {
-    assert(typeof jiccup.CONSTANTS.ERROR_NULL === 'string', 'Should have ERROR_NULL message');
+    // NOTE: ERROR_NULL and ERROR_ATTR_NULL have been removed as null is now accepted (same as false)
     assert(typeof jiccup.CONSTANTS.ERROR_UNDEFINED === 'string', 'Should have ERROR_UNDEFINED message');
-    assert(typeof jiccup.CONSTANTS.ERROR_ATTR_NULL === 'function', 'Should have ERROR_ATTR_NULL function');
     assert(typeof jiccup.CONSTANTS.ERROR_ATTR_UNDEFINED === 'function', 'Should have ERROR_ATTR_UNDEFINED function');
 });
 

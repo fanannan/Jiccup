@@ -114,9 +114,10 @@ jiccup.html(['input', {
 }])
 // → <input type="email" placeholder="Enter email" required>
 
-// Boolean attributes
+// Boolean and null attributes
 jiccup.html(['input', {checked: true}])   // → <input checked>
 jiccup.html(['input', {checked: false}])  // → <input>
+jiccup.html(['input', {checked: null}])   // → <input> (null also omits attribute)
 ```
 
 ### CSS Styles
@@ -182,12 +183,14 @@ jiccup.html([Card, {
 ```javascript
 const showHeader = true;
 const showFooter = false;
+const showSidebar = null;  // null can also be used
 const user = {name: 'John'};
 
 jiccup.html(['div',
   showHeader && ['header', 'Site Header'],
   ['main', `Welcome, ${user.name}!`],
-  showFooter && ['footer', 'Site Footer']  // This will be ignored
+  showFooter && ['footer', 'Site Footer'],  // false is ignored
+  showSidebar ? ['aside', 'Sidebar'] : null  // null is also ignored
 ])
 // → <div><header>Site Header</header><main>Welcome, John!</main></div>
 ```
@@ -394,6 +397,11 @@ result.attach(document.getElementById('app'));
 MIT License 
 
 ## Changelog
+
+### v1.2.0
+- null values are now accepted like false (elements skipped, attributes omitted)
+- undefined values still throw errors for bug detection
+- Updated error messages to suggest using false or null instead
 
 ### v1.1.0
 - Enhanced parseTag function to support flexible CSS-style selectors

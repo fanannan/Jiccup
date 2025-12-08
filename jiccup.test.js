@@ -407,22 +407,24 @@ test('Multiple argument syntax', () => {
 // ============================================================================
 console.log('\n=== jiccup.html() - Error cases ===');
 
-test('null element throws error', () => {
-    assertThrows(
-        () => jiccup.html(['div', null]),
-        'null values are not allowed'
+test('null element is skipped like false', () => {
+    // null is now treated like false - elements are skipped
+    assertEquals(
+        jiccup.html(['div', null, ['span', 'Visible']]),
+        '<div><span>Visible</span></div>'
     );
 });
 
 test('undefined element throws error', () => {
     assertThrows(
         () => jiccup.html(['div', undefined]),
-        'undefined values are not allowed'
+        'undefined values are not allowed. Use false or null instead.'
     );
 });
 
 test('null class attribute is converted to empty string', () => {
-    // Note: class and style attributes have special processing that converts null to empty string
+    // Note: class attribute has special processing via processClass()
+    // which converts null to empty string (not skipped like regular null attributes)
     assertEquals(
         jiccup.html(['div', {class: null}]),
         '<div class=""></div>'
@@ -432,14 +434,15 @@ test('null class attribute is converted to empty string', () => {
 test('undefined attribute throws error', () => {
     assertThrows(
         () => jiccup.html(['div', {id: undefined}]),
-        'Attribute "id" has an undefined value'
+        'Attribute "id" has an undefined value. Use false or null instead.'
     );
 });
 
-test('null regular attribute throws error', () => {
-    assertThrows(
-        () => jiccup.html(['div', {title: null}]),
-        'Attribute "title" has a null value'
+test('null regular attribute is skipped like false', () => {
+    // null is now treated like false - attributes are omitted
+    assertEquals(
+        jiccup.html(['div', {title: null, id: 'test'}]),
+        '<div id="test"></div>'
     );
 });
 

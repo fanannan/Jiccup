@@ -6,7 +6,7 @@
 
 Design mentions attribute processing: style object conversion, class array, dangerousSetInnerHTML. Code implements.
 
-Design mentions that null/undefined should error with 3-element messages. Code's throwIfNullOrUndefined builds detailed diagnostics, includes error codes. Good.
+Design update (v1.2.0): null is now accepted like false (skipped). Only undefined throws error with detailed diagnostics via throwIfUndefined. Good.
 
 Potential missing: design mentions that false should be ignored (conditional rendering). Code's validateElement returns false for element===false, skipping. Good.
 
@@ -18,7 +18,7 @@ Check that parseTag regex allows multiple IDs? It throws error on multiple IDs. 
 
 Check that attribute validation for false values: validateAttributeValue returns false if value===false, skipping attribute. Good.
 
-Potential missing: design mentions that attribute values null/undefined should error. Code does.
+Design update (v1.2.0): attribute values - null is now skipped (like false), only undefined throws error. Code does.
 
 Potential missing: design mentions that empty selectors not allowed. Code checks empty ID/class.
 

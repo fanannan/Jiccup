@@ -136,12 +136,13 @@
  * jiccup.html(
  *   ['div',
  *     showTitle && ['h1', 'Title'],  // false is ignored
+ *     showFooter ? ['footer', 'Footer'] : null,  // null is also ignored
  *     ['p', 'Always shown']]
  * )
  * // => '<div><p>Always shown</p></div>'
- * 
- * // null/undefined will throw an error
- * // jiccup.html(['div', null]) => Error
+ *
+ * // null is accepted (same as false), undefined will throw an error
+ * // jiccup.html(['div', null]) => '<div></div>' (null is skipped)
  * // jiccup.html(['div', undefined]) => Error
  * ```
  * 
@@ -281,10 +282,9 @@ const CONSTANTS = {
     CAMEL_CASE_PATTERN: /([A-Z])/g,
     
     // Error messages
-    ERROR_NULL: 'null values are not allowed. Use false instead.',
-    ERROR_UNDEFINED: 'undefined values are not allowed. Use false instead.',
-    ERROR_ATTR_NULL: (key) => `Attribute "${key}" has a null value. Use false instead.`,
-    ERROR_ATTR_UNDEFINED: (key) => `Attribute "${key}" has an undefined value. Use false instead.`
+    // NOTE: null values are now accepted (same as false). Only undefined throws errors.
+    ERROR_UNDEFINED: 'undefined values are not allowed. Use false or null instead.',
+    ERROR_ATTR_UNDEFINED: (key) => `Attribute "${key}" has an undefined value. Use false or null instead.`
 };
 
 // Set of void elements (self-closing tags)
@@ -539,20 +539,19 @@ function processElement(element, buffer) {
 }
 
 /**
- * Generate error for null/undefined values with comprehensive diagnostics
+ * Generate error for undefined values with comprehensive diagnostics.
+ * NOTE: null values are now accepted (same as false). Only undefined throws errors.
  * @param {any} value - Value to check
  * @param {string} errorType - Error type ('element' or 'attribute')
  * @param {string} [key] - Attribute name (for attributes)
  * @param {any} [parentElement] - Parent element for context
  * @param {number} [arrayIndex] - Array index if element is in array
  * @returns {void}
- * @throws {JiccupError} If null/undefined
+ * @throws {JiccupError} If undefined
  */
-function throwIfNullOrUndefined(value, errorType, key, parentElement, arrayIndex, pathSegments = [], rootElement = null) {
-    const isNull = value === null;
-    const isUndefined = value === undefined;
-
-    if (!isNull && !isUndefined) return;
+function throwIfUndefined(value, errorType, key, parentElement, arrayIndex, pathSegments = [], rootElement = null) {
+    // nullは許可される（falseと同じ扱い）。undefinedのみエラーとする。
+    if (value !== undefined) return;
 
     // スタックトレース情報を収集
     const error = new Error();
@@ -600,7 +599,7 @@ function throwIfNullOrUndefined(value, errorType, key, parentElement, arrayIndex
     // 詳細な診断情報を含むコンテキストを作成
     const diagnostics = {
         // 基本情報
-        valueType: isNull ? 'null' : 'undefined',
+        valueType: 'undefined',
         errorType,
         arrayIndex,
         key,
@@ -637,12 +636,12 @@ function throwIfNullOrUndefined(value, errorType, key, parentElement, arrayIndex
     };
 
     const isAttribute = errorType === 'attribute';
-    const errorCode = isNull ? ERROR_CODES.NULL_VALUE : ERROR_CODES.UNDEFINED_VALUE;
+    const errorCode = ERROR_CODES.UNDEFINED_VALUE;
 
     // 改良されたエラーメッセージ（診断情報を含む）
     let enhancedMessage = isAttribute
-        ? (isNull ? CONSTANTS.ERROR_ATTR_NULL(key) : CONSTANTS.ERROR_ATTR_UNDEFINED(key))
-        : (isNull ? CONSTANTS.ERROR_NULL : CONSTANTS.ERROR_UNDEFINED);
+        ? CONSTANTS.ERROR_ATTR_UNDEFINED(key)
+        : CONSTANTS.ERROR_UNDEFINED;
 
     // 診断情報を追加
     enhancedMessage += '\n\n=== 詳細診断情報 ===';
@@ -707,19 +706,19 @@ function summarizeElement(element) {
  * @param {any} [parentElement] - Parent element for context
  * @param {number} [arrayIndex] - Array index if element is in array
  * @returns {boolean} true if processing should continue
- * @throws {JiccupError} If null/undefined
+ * @throws {JiccupError} If undefined
  */
 function validateElement(element, parentElement, arrayIndex, pathSegments, rootElement) {
-    // 詳細な診断情報付きでnull/undefined チェックを実行
-    throwIfNullOrUndefined(element, 'element', null, parentElement, arrayIndex, pathSegments, rootElement);
+    // 詳細な診断情報付きでundefinedチェックを実行（nullは許可）
+    throwIfUndefined(element, 'element', null, parentElement, arrayIndex, pathSegments, rootElement);
 
-    // falseの場合は処理をスキップ（エラーは発生させない）
-    const shouldContinue = element !== false;
+    // falseまたはnullの場合は処理をスキップ（エラーは発生させない）
+    const shouldContinue = element !== false && element !== null;
 
     // デバッグ情報のログ出力（開発時のみ）
     if (typeof console !== 'undefined' && console.debug) {
         if (!shouldContinue) {
-            console.debug('[Jiccup Debug] validateElement: 要素がfalseのため処理をスキップ', {
+            console.debug('[Jiccup Debug] validateElement: 要素がfalseまたはnullのため処理をスキップ', {
                 element,
                 parentElement: parentElement || 'N/A',
                 arrayIndex: arrayIndex || 'N/A',
@@ -814,11 +813,11 @@ function processAttributes(rawAttrs, context) {
  * @param {string} key - Attribute name
  * @param {any} value - Attribute value
  * @returns {boolean} true if attribute should be added
- * @throws {JiccupError} If null/undefined
+ * @throws {JiccupError} If undefined
  */
 function validateAttributeValue(key, value, pathSegments = [], rootElement = null) {
-    throwIfNullOrUndefined(value, 'attribute', key, null, undefined, pathSegments, rootElement);
-    return value !== false; // Don't add attribute if false
+    throwIfUndefined(value, 'attribute', key, null, undefined, pathSegments, rootElement);
+    return value !== false && value !== null; // Don't add attribute if false or null
 }
 
 /**
