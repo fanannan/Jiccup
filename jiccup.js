@@ -773,8 +773,9 @@ function processComponent(element, buffer, context, depth) {
  * @returns {Object<string, Function>} Event handler map
  */
 function extractEventHandlers(attrs) {
+    /** @type {Object<string, Function>} */
     const events = {};
-    
+
     Object.keys(attrs).forEach(key => {
         if (key.startsWith(CONSTANTS.EVENT_PREFIX) && typeof attrs[key] === 'function') {
             events[key.substring(CONSTANTS.EVENT_PREFIX.length)] = attrs[key];
@@ -1143,10 +1144,12 @@ function parseTag(tag) {
         );
     }
     
+    /** @type {Object<string, string>} */
     const attrs = {};
+    /** @type {string[]} */
     const classes = [];
     let hasId = false;
-    
+
     for (const part of selectorParts) {
         if (part.startsWith('#')) {
             if (hasId) {
