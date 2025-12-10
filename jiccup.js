@@ -452,7 +452,7 @@ function html(...args) {
 /**
  * Get container element
  * @param {string|HTMLElement} container - Selector or DOM element
- * @returns {HTMLElement} DOM element
+ * @returns {Element} DOM element
  */
 function getContainer(container) {
     if (typeof container === 'string') {
@@ -472,8 +472,8 @@ function getContainer(container) {
 
 /**
  * Apply event bindings to elements
- * @param {HTMLElement} container - Container element
- * @param {Array<{id: string, events: Object<string, Function>}>} bindings - Binding information
+ * @param {Element} container - Container element
+ * @param {Array<{id: string, events: Object<string, EventListener>}>} bindings - Binding information
  * @returns {void}
  */
 function applyBindings(container, bindings) {
@@ -482,6 +482,7 @@ function applyBindings(container, bindings) {
         if (!el) return;
         
         Object.entries(binding.events).forEach(([event, handler]) => {
+            console.log("binding events are not recommended at Jiccup generation. You have to take care of unbind them by yourself.");
             el.addEventListener(event, handler);
         });
     });
@@ -702,9 +703,11 @@ function summarizeElement(element) {
 
 /**
  * Validate element (null/undefined/false check) with detailed diagnostics
- * @param {any} element - Element to validate
- * @param {any} [parentElement] - Parent element for context
+ * @param {Element|null|false} element - Element to validate
+ * @param {Element} parentElement - Parent element for context
  * @param {number} [arrayIndex] - Array index if element is in array
+ * @param {Array} [pathSegments] - Array index if element is in array
+ * @param {number} [rootElement] - Array index if element is in array
  * @returns {boolean} true if processing should continue
  * @throws {JiccupError} If undefined
  */
