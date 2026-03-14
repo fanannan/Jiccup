@@ -574,6 +574,45 @@ testDOM('Event handler with correct this binding', () => {
     assertEquals(capturedThis, button, 'this should be the button element');
 });
 
+test('getDebugInfo reports cache size from Map entries', () => {
+    const before = jiccup.getDebugInfo().cacheSize;
+    const uniqueTag = `section.cache-check-${Math.random().toString(36).slice(2)}`;
+
+    jiccup.html([uniqueTag, 'Cache test']);
+
+    const after = jiccup.getDebugInfo().cacheSize;
+    assertEquals(after, before + 1, 'cache size should increase for a new tag');
+});
+
+test('validateElement debug logging is silent when debug mode is disabled', () => {
+    const originalDebug = console.debug;
+    let debugCalls = 0;
+    console.debug = () => { debugCalls++; };
+
+    try {
+        jiccup.disableDebugMode();
+        jiccup.html(['div', null, false, 'visible']);
+        assertEquals(debugCalls, 0, 'debug logging should be disabled');
+    } finally {
+        console.debug = originalDebug;
+    }
+});
+
+test('validateElement debug logging runs when debug mode is enabled', () => {
+    const originalDebug = console.debug;
+    let debugCalls = 0;
+    console.debug = () => { debugCalls++; };
+
+    try {
+        jiccup.enableDebugMode();
+        jiccup.html(['div', null, 'visible']);
+        assert(debugCalls > 0, 'debug logging should run in debug mode');
+    } finally {
+        jiccup.disableDebugMode();
+        console.debug = originalDebug;
+    }
+});
+
 // ============================================================================
 // jiccup.fragment() tests
 // ============================================================================

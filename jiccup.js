@@ -719,7 +719,7 @@ function validateElement(element, parentElement, arrayIndex, pathSegments, rootE
     const shouldContinue = element !== false && element !== null;
 
     // デバッグ情報のログ出力（開発時のみ）
-    if (typeof console !== 'undefined' && console.debug) {
+    if (typeof console !== 'undefined' && console.debug && jiccup.debugMode) {
         if (!shouldContinue) {
             console.debug('[Jiccup Debug] validateElement: 要素がfalseまたはnullのため処理をスキップ', {
                 element,
@@ -1238,7 +1238,7 @@ const jiccup = {
         return {
             debugMode: this.debugMode,
             version: '1.0.0',
-            cacheSize: Object.keys(tagCache).length,
+            cacheSize: tagCache.size,
             constants: CONSTANTS,
             performance: {
                 tagCacheEnabled: true,
