@@ -575,13 +575,16 @@ testDOM('Event handler with correct this binding', () => {
 });
 
 test('getDebugInfo reports cache size from Map entries', () => {
-    const before = jiccup.getDebugInfo().cacheSize;
+    const beforeDebugInfo = jiccup.getDebugInfo();
+    const before = beforeDebugInfo.cacheSize;
+    const maxCacheSize = beforeDebugInfo.performance.maxCacheSize;
     const uniqueTag = `section.cache-check-${Math.random().toString(36).slice(2)}`;
 
     jiccup.html([uniqueTag, 'Cache test']);
 
     const after = jiccup.getDebugInfo().cacheSize;
-    assertEquals(after, before + 1, 'cache size should increase for a new tag');
+    const expected = Math.min(before + 1, maxCacheSize);
+    assertEquals(after, expected, 'cache size should reflect cache growth up to the configured limit');
 });
 
 test('validateElement debug logging is silent when debug mode is disabled', () => {
