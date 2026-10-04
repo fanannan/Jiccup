@@ -754,6 +754,20 @@ test('Complex attribute combinations', () => {
     assert(!result.includes('disabled'), 'Should not include boolean false attribute');
 });
 
+
+for (const kind of ['null', 'undefined', 'getter', 'self throw']) {
+    test(`html preserves the component failure cause for ${kind}`, () => {
+        let reads = 0;
+        const failure = kind === 'null' ? null : kind === 'undefined' ? undefined :
+            Object.defineProperty(new Error(), 'message', { get() { reads += 1; throw kind === 'self throw' ? failure : new Error('diagnostic'); } });
+        let didThrow = false;
+        let observed;
+        try { jiccup.html([() => { throw failure; }]); } catch (error) { didThrow = true; observed = error; }
+        assert(didThrow && observed === failure, 'component cause identity must survive logging');
+        if (kind === 'getter' || kind === 'self throw') assert(reads === 1, 'diagnostic getter must be read once');
+    });
+}
+
 // ============================================================================
 // Summary
 // ============================================================================

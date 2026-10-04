@@ -373,6 +373,30 @@ function normalizeInput(args) {
 }
 
 /**
+ * 独立ライブラリの診断境界。外部依存を追加せず、任意 throw 値の getter を一度だけ読む。
+ * @param {unknown} error - 捕捉した元の原因
+ * @returns {{message: string, errorType: string}} ログ向けの文字列だけを保持する診断
+ */
+function describeCaughtError(error) {
+    let message;
+    try {
+        const captured = error !== null && (typeof error === 'object' || typeof error === 'function')
+            && 'message' in error ? error.message : error;
+        message = String(captured);
+    } catch {
+        message = 'エラーの診断取得に失敗しました';
+    }
+    let errorType;
+    try {
+        errorType = error !== null && (typeof error === 'object' || typeof error === 'function')
+            ? String(error.constructor?.name) : typeof error;
+    } catch {
+        errorType = '診断取得不能';
+    }
+    return { message, errorType };
+}
+
+/**
  * Generate HTML string from Hiccup format array
  * @param {...any} args - Hiccup format elements
  * @returns {string} HTML string
@@ -436,12 +460,13 @@ function html(...args) {
 
         // エラーログ出力
         if (typeof console !== 'undefined' && console.error) {
+            const diagnostic = describeCaughtError(error);
             console.error('[Jiccup] html() 呼び出し中にエラーが発生', {
-                error: error.message,
+                error: diagnostic.message,
                 args,
                 processingTime: `${processingTime.toFixed(3)}ms`,
                 callStack: callStack?.split('\n').slice(0, 10),
-                errorType: error.constructor.name
+                errorType: diagnostic.errorType
             });
         }
 
