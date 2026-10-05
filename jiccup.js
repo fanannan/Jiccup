@@ -1149,7 +1149,7 @@ function processElementWithContext(element, buffer, context = null, depth = 0) {
 function getCachedTag(tag) {
     if (!tagCache.has(tag)) return null;
     const cached = tagCache.get(tag);
-    // 存在する破損 entry を cache miss として再生成し、失敗を隠さない。
+    // 破損 entry は cache miss として再生成せず、状態を残して明示停止する。
     if (cached === undefined) {
         throw new TypeError(`Cached tag "${tag}" has no value although the entry exists. Remove the corrupted cache entry before retrying.`);
     }
@@ -1287,20 +1287,24 @@ function parseTag(tag) {
 
 
 /**
- * property 読取と同じ boxing を行い、診断用 message を一度だけ読む。
- * 任意 throw 値の constructor は読まず、nullish 値の読取失敗も維持する。
+ * 任意の throw 値から診断文を一度だけ取得し、診断処理の失敗で本来のJiccupErrorを置換しない。
+ * property getter と文字列化はいずれも失敗し得るため、失敗時は固定文へ閉じる。
  * @param {unknown} error - 診断作成中に捕捉した値。
- * @returns {unknown} 元の message 値。
+ * @returns {string} 取得済みのmessage、または診断取得失敗の固定文。
  */
 function readDiagnosticMessage(error) {
-    if (error === null || error === undefined) {
-        throw new TypeError(`Cannot read properties of ${error} (reading 'message')`);
+    try {
+        if (error === null || error === undefined) {
+            throw new TypeError(`Cannot read properties of ${error} (reading 'message')`);
+        }
+        /** @type {object} */
+        const boxed = Object(error);
+        /** @type {unknown} */
+        const message = Reflect.get(boxed, 'message', error);
+        return typeof message === 'string' ? message : String(message);
+    } catch {
+        return 'エラーの診断取得に失敗しました';
     }
-    /** @type {object} */
-    const boxed = Object(error);
-    /** @type {unknown} */
-    const message = Reflect.get(boxed, 'message', error);
-    return message;
 }
 
 /**

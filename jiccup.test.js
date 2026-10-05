@@ -832,7 +832,7 @@ test('present undefined cache entries stop instead of being regenerated', () => 
 });
 
 // primitive の property read は boxing 後も元の receiver を getter に渡す。
-test('diagnostic message getters preserve primitive receivers and getter failure identity', () => {
+test('diagnostic message getters preserve primitive receivers and the original typed failure', () => {
     const saved = Object.getOwnPropertyDescriptor(String.prototype, 'message');
     const primitiveFailure = 'primitive diagnostic failure';
     const getterFailure = new Error('diagnostic getter failure');
@@ -856,7 +856,10 @@ test('diagnostic message getters preserve primitive receivers and getter failure
             assertEquals(receivers.length, 1, 'diagnostic message getter must be read once');
             assertEquals(receivers[0], primitiveFailure, 'message getter must receive the original primitive');
             if (throwsFromGetter) {
-                assertEquals(observed, getterFailure, 'diagnostic getter failure identity must survive');
+                assert(observed instanceof __testExports.JiccupError, 'diagnostic getter failure must not replace the original typed failure');
+                assertEquals(observed.code, __testExports.ERROR_CODES.UNDEFINED_VALUE);
+                assertEquals(observed.context.diagnostics.parent.error,
+                    'Failed to analyze parent element: エラーの診断取得に失敗しました');
             } else {
                 assert(observed instanceof __testExports.JiccupError, 'undefined input must keep its typed failure');
                 assertEquals(observed.context.diagnostics.parent.error,
