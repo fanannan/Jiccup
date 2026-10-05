@@ -7,7 +7,7 @@ A simplified JavaScript implementation of the Clojure Hiccup library (https://gi
 ## Features
 
 - 🚀 **Zero Dependencies** - Pure JavaScript implementation
-- 🎯 **Type Safe** - Full TypeScript-compatible JSDoc annotations
+- 🎯 **Checked Public Types** - Provider-owned declarations connected to JavaScript exports
 - 🔒 **XSS Protection** - Automatic HTML escaping by default
 - 🎨 **CSS-in-JS** - Object-style CSS with camelCase to kebab-case conversion
 - ⚡ **Performance** - Tag parsing cache and optimized rendering
@@ -27,6 +27,20 @@ A simplified JavaScript implementation of the Clojure Hiccup library (https://gi
 ```javascript
 import { jiccup } from './jiccup.js';
 ```
+
+## 型と公開契約
+
+実行コードは Plain JavaScript のままです。型正本の `types.d.ts` と公開JSDocを一緒に配置し、`jiccup.js` を直接検査します。同名の `jiccup.d.ts` で本体を隠しません。アプリのグローバル型はこの提供型を参照します。
+
+- `html()` の属性にはイベント関数を渡せません。渡すと `JiccupError/INVALID_ELEMENT` で停止し、`render()` の使用を案内します。`render()` は `on:*` 関数の binding を生成し、返却結果の `attach(container)` がDOMへ登録します。
+- `JiccupNode` は通常要素を保存する再帰的な部分集合です。異種componentの必須propsは公開APIのgeneric検査で照合します。保存するcomponent tupleには個別の `JiccupComponentNode<Props, Return>` または正確なtuple型を使い、任意propsへ消去しません。
+- componentは一つのprops objectを受け取ります。`children` は位置引数の子群で上書きされます。
+- 属性objectは要素の第2位置だけに置きます。`undefined`、裸の属性object、未検査の `unknown[]` は正規ノードに含みません。`false` と `null` は省略値です。
+- 非文字列先頭の子群は展開されます。文字列先頭はtagとして解釈されるため、一般文字列配列のflattenは保証しません。
+- `fragment()` はsentinel literalと各子ノード型を保存します。返型は子数・位置相関を保証しません。raw fragment sentinelは通常string tagとの重なりがあるため、完全な静的拒否は保証しません。
+- `attach(container)` と `cleanup(container)` は必須selectorまたは `Element` を受け、実際の `Element` を返します。`reportError(element, context)` はreportまたは `null` を返します。
+
+既存のclass/style/id変換を型整理のために変更しません。正常な描画、escaping、原throw値、handler参照、イベント順序とDOM identityはnative・ブラウザ回帰で検証します。
 
 ## Quick Start
 

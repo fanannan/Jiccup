@@ -217,6 +217,18 @@
  * @module jiccup
  */
 
+/**
+ * 内部境界は正規ノード型へ未知の値を寄せず、処理箇所ごとの検証で絞り込む。
+ * @typedef {Record<string, unknown>} JiccupRuntimeAttributes
+ * @typedef {object} JiccupProcessingContext
+ * @property {string[]} [path] - 診断上の要素パス。
+ * @property {unknown} [parent] - 診断対象の親入力。
+ * @property {number|null} [arrayIndex] - 親入力内の位置。
+ * @property {unknown} [rootElement] - 診断対象の元入力。
+ * @property {() => string} [nextId] - render のイベント ID 発行能力。
+ * @property {ReturnType<typeof render>['bindings']} [bindings] - render の登録結果。
+ */
+
 // Configuration constants
 const CONFIG = {
     MAX_DEPTH: 100,              // Maximum nesting depth
@@ -225,6 +237,11 @@ const CONFIG = {
 
 // Custom error class
 class JiccupError extends Error {
+    /**
+     * @param {string} message - 発生内容・原因・解決方法。
+     * @param {string} code - 呼出し側が識別できるエラー分類。
+     * @param {Record<string, unknown>} context - 元入力を保持する診断文脈。
+     */
     constructor(message, code, context = {}) {
         super(message);
         this.name = 'JiccupError';
@@ -245,6 +262,7 @@ const ERROR_CODES = {
 };
 
 // Constant definitions
+/** @type {import('./types.js').JiccupConstants} */
 const CONSTANTS = {
     // Special tags
     FRAGMENT: ':<>',
@@ -295,6 +313,7 @@ const VOID_ELEMENTS = new Set([
 ]);
 
 // Map for HTML escaping
+/** @type {Record<string, string>} */
 const ESCAPE_MAP = {
     '&': '&amp;',
     '<': '&lt;',
@@ -304,6 +323,7 @@ const ESCAPE_MAP = {
 };
 
 // parseTag cache
+/** @type {Map<string, [string, Record<string, string>]>} */
 const tagCache = new Map();
 
 /**
@@ -318,8 +338,9 @@ function escapeHtml(str) {
 
 /**
  * Create a Fragment (tagless element group)
- * @param {...any} children - Child elements
- * @returns {Array<any>} Fragment format array
+ * @template {unknown[]} Children
+ * @param {Children} children - Child elements, in their original order
+ * @returns {import('./types.js').JiccupFragment<Children>} Fragment format array
  */
 function fragment(...children) {
     return [CONSTANTS.FRAGMENT, ...children];
@@ -327,7 +348,7 @@ function fragment(...children) {
 
 /**
  * Convert style object to CSS string
- * @param {string|Object<string, string>} style - Style string or object
+ * @param {unknown} style - Style string or object
  * @returns {string} CSS string
  */
 function processStyle(style) {
@@ -348,13 +369,13 @@ function processStyle(style) {
 
 /**
  * Convert class array to string
- * @param {string|Array<string>} className - Class string or array
+ * @param {unknown} className - Class string or array
  * @returns {string} Class string
  */
 function processClass(className) {
     if (typeof className === 'string') return className;
     
-    if (Array.isArray(className)) {
+    if (isUnknownArray(className)) {
         return className
             .filter(Boolean) // Remove null, undefined, false, ''
             .join(' ');
@@ -365,8 +386,8 @@ function processClass(className) {
 
 /**
  * Normalize arguments (single argument as-is, multiple arguments wrapped in array)
- * @param {Array<any>} args - Arguments array
- * @returns {any} Normalized input
+ * @param {unknown[]} args - Arguments array
+ * @returns {unknown} Normalized input
  */
 function normalizeInput(args) {
     return args.length === 1 ? args[0] : args;
@@ -398,7 +419,8 @@ function describeCaughtError(error) {
 
 /**
  * Generate HTML string from Hiccup format array
- * @param {...any} args - Hiccup format elements
+ * 公開 export は types.d.ts の入力契約で検査し、この境界は未知の実行時入力も診断する。
+ * @param {...unknown} args - Hiccup format elements
  * @returns {string} HTML string
  */
 function html(...args) {
@@ -407,6 +429,7 @@ function html(...args) {
     const callStack = new Error().stack;
 
     try {
+        /** @type {unknown[]} */
         const buffer = [];
         const input = normalizeInput(args);
 
@@ -416,7 +439,7 @@ function html(...args) {
                 args,
                 normalizedInput: input,
                 inputType: typeof input,
-                isArray: Array.isArray(input),
+                isArray: isUnknownArray(input),
                 timestamp: new Date().toISOString(),
                 callStack: callStack?.split('\n').slice(0, 5) // 最初の5行のみ
             });
@@ -476,7 +499,7 @@ function html(...args) {
 
 /**
  * Get container element
- * @param {string|HTMLElement} container - Selector or DOM element
+ * @param {string|Element} container - Selector or DOM element
  * @returns {Element} DOM element
  */
 function getContainer(container) {
@@ -498,7 +521,7 @@ function getContainer(container) {
 /**
  * Apply event bindings to elements
  * @param {Element} container - Container element
- * @param {Array<{id: string, events: Object<string, EventListener>}>} bindings - Binding information
+ * @param {Array<{id: string, events: Record<string, EventListener>}>} bindings - Binding information
  * @returns {void}
  */
 function applyBindings(container, bindings) {
@@ -515,11 +538,14 @@ function applyBindings(container, bindings) {
 
 /**
  * Generate HTML string and event bindings from Hiccup format array
- * @param {...any} args - Hiccup format elements
- * @returns {{html: string, bindings: Array<{id: string, events: Object<string, Function>}>, attach: Function}} HTML and event bindings
+ * 公開 export は types.d.ts の HTML とイベント属性の区分を維持する。
+ * @param {...unknown} args - Hiccup format elements
+ * @returns {import('./types.js').JiccupRenderResult} HTML and event bindings
  */
 function render(...args) {
+    /** @type {unknown[]} */
     const buffer = [];
+    /** @type {import('./types.js').JiccupBinding[]} */
     const bindings = [];
     let idCounter = 0;
     
@@ -550,8 +576,8 @@ function render(...args) {
 
 /**
  * Process element and add to buffer
- * @param {any} element - Element to process
- * @param {Array<string>} buffer - Buffer to accumulate HTML strings
+ * @param {unknown} element - Element to process
+ * @param {unknown[]} buffer - Buffer to accumulate HTML strings
  * @returns {void}
  */
 function processElement(element, buffer) {
@@ -567,11 +593,13 @@ function processElement(element, buffer) {
 /**
  * Generate error for undefined values with comprehensive diagnostics.
  * NOTE: null values are now accepted (same as false). Only undefined throws errors.
- * @param {any} value - Value to check
+ * @param {unknown} value - Value to check
  * @param {string} errorType - Error type ('element' or 'attribute')
- * @param {string} [key] - Attribute name (for attributes)
- * @param {any} [parentElement] - Parent element for context
- * @param {number} [arrayIndex] - Array index if element is in array
+ * @param {string|null} [key] - Attribute name (for attributes)
+ * @param {unknown} [parentElement] - Parent element for context
+ * @param {number|null} [arrayIndex] - Array index if element is in array
+ * @param {string[]} [pathSegments] - 診断上の要素パス。
+ * @param {unknown} [rootElement] - 元入力。
  * @returns {void}
  * @throws {JiccupError} If undefined
  */
@@ -602,23 +630,24 @@ function throwIfUndefined(value, errorType, key, parentElement, arrayIndex, path
     }
 
     // 親要素の詳細情報を生成
+    /** @type {{type?: string, isArray?: boolean, length?: number|null, firstElement?: unknown, preview?: string, error?: string}|null} */
     let parentInfo = null;
     if (parentElement) {
         try {
             parentInfo = {
-                type: Array.isArray(parentElement) ? 'array' : typeof parentElement,
-                isArray: Array.isArray(parentElement),
-                length: Array.isArray(parentElement) ? parentElement.length : null,
-                firstElement: Array.isArray(parentElement) ? parentElement[0] : null,
-                preview: Array.isArray(parentElement)
+                type: isUnknownArray(parentElement) ? 'array' : typeof parentElement,
+                isArray: isUnknownArray(parentElement),
+                length: isUnknownArray(parentElement) ? parentElement.length : null,
+                firstElement: isUnknownArray(parentElement) ? parentElement[0] : null,
+                preview: isUnknownArray(parentElement)
                     ? `[${parentElement.slice(0, 3).map(el =>
                         typeof el === 'string' ? `"${el.substring(0, 20)}"` :
-                        Array.isArray(el) ? '[Array]' : String(el)
+                        isUnknownArray(el) ? '[Array]' : String(el)
                     ).join(', ')}${parentElement.length > 3 ? '...' : ''}]`
                     : String(parentElement).substring(0, 100)
             };
         } catch (e) {
-            parentInfo = { error: 'Failed to analyze parent element: ' + e.message };
+            parentInfo = { error: 'Failed to analyze parent element: ' + readDiagnosticMessage(e) };
         }
     }
 
@@ -666,7 +695,7 @@ function throwIfUndefined(value, errorType, key, parentElement, arrayIndex, path
 
     // 改良されたエラーメッセージ（診断情報を含む）
     let enhancedMessage = isAttribute
-        ? CONSTANTS.ERROR_ATTR_UNDEFINED(key)
+        ? CONSTANTS.ERROR_ATTR_UNDEFINED(String(key))
         : CONSTANTS.ERROR_UNDEFINED;
 
     // 診断情報を追加
@@ -702,12 +731,12 @@ function throwIfUndefined(value, errorType, key, parentElement, arrayIndex, path
 
 /**
  * Create a concise summary string for logging elements
- * @param {any} element - Element or value to summarize
+ * @param {unknown} element - Element or value to summarize
  * @returns {string} summary text
  */
 function summarizeElement(element) {
     try {
-        if (Array.isArray(element)) {
+        if (isUnknownArray(element)) {
             const head = element[0];
             if (typeof head === 'string') {
                 return `[${head} ...]`;
@@ -722,17 +751,17 @@ function summarizeElement(element) {
         }
         return String(element);
     } catch (error) {
-        return `unavailable(${error.message})`;
+        return `unavailable(${readDiagnosticMessage(error)})`;
     }
 }
 
 /**
  * Validate element (null/undefined/false check) with detailed diagnostics
- * @param {Element|null|false} element - Element to validate
- * @param {Element} parentElement - Parent element for context
- * @param {number} [arrayIndex] - Array index if element is in array
- * @param {Array} [pathSegments] - Array index if element is in array
- * @param {number} [rootElement] - Array index if element is in array
+ * @param {unknown} element - Element to validate
+ * @param {unknown} parentElement - Parent element for context
+ * @param {number|null} [arrayIndex] - Array index if element is in array
+ * @param {string[]} [pathSegments] - Array index if element is in array
+ * @param {unknown} [rootElement] - Array index if element is in array
  * @returns {boolean} true if processing should continue
  * @throws {JiccupError} If undefined
  */
@@ -762,12 +791,12 @@ function validateElement(element, parentElement, arrayIndex, pathSegments, rootE
 
 /**
  * Process simple values (strings/numbers)
- * @param {any} value - Value to process
- * @param {Array<string>} buffer - Buffer to accumulate HTML strings
+ * @param {unknown} value - Value to process
+ * @param {unknown[]} buffer - Buffer to accumulate HTML strings
  * @returns {boolean} true if processed
  */
 function processSimpleValue(value, buffer) {
-    if (!Array.isArray(value)) {
+    if (!isUnknownArray(value)) {
         buffer.push(escapeHtml(String(value)));
         return true;
     }
@@ -776,18 +805,19 @@ function processSimpleValue(value, buffer) {
 
 /**
  * Process component (function)
- * @param {Array<any>} element - Element to process
- * @param {Array<string>} buffer - Buffer to accumulate HTML strings
- * @param {Object|null} context - Rendering context
+ * @param {unknown[]} element - Element to process
+ * @param {unknown[]} buffer - Buffer to accumulate HTML strings
+ * @param {JiccupProcessingContext|null} context - Rendering context
  * @param {number} depth - Current nesting depth
  * @returns {boolean} true if processed
  */
 function processComponent(element, buffer, context, depth) {
     const [component, ...rest] = element;
-    if (typeof component !== 'function') return false;
+    if (!isRuntimeComponent(component)) return false;
     
-    const hasProps = rest[0] && isPlainObject(rest[0]);
-    const props = hasProps ? rest[0] : {};
+    const propsCandidate = rest[0];
+    const hasProps = propsCandidate && isPlainObject(propsCandidate);
+    const props = hasProps ? propsCandidate : {};
     const children = hasProps ? rest.slice(1) : rest;
     
     const result = component({ ...props, children });
@@ -797,15 +827,15 @@ function processComponent(element, buffer, context, depth) {
 
 /**
  * Extract event handlers
- * @param {Object<string, any>} attrs - Attributes object
- * @returns {Object<string, Function>} Event handler map
+ * @param {JiccupRuntimeAttributes} attrs - Attributes object
+ * @returns {Record<string, EventListener>} Event handler map
  */
 function extractEventHandlers(attrs) {
-    /** @type {Object<string, Function>} */
+    /** @type {Record<string, EventListener>} */
     const events = {};
 
     Object.keys(attrs).forEach(key => {
-        if (key.startsWith(CONSTANTS.EVENT_PREFIX) && typeof attrs[key] === 'function') {
+        if (key.startsWith(CONSTANTS.EVENT_PREFIX) && isEventHandler(attrs[key])) {
             events[key.substring(CONSTANTS.EVENT_PREFIX.length)] = attrs[key];
             delete attrs[key];
         }
@@ -816,9 +846,9 @@ function extractEventHandlers(attrs) {
 
 /**
  * Process attributes (style, class, events)
- * @param {Object<string, any>} rawAttrs - Raw attributes object
- * @param {Object|null} context - Rendering context
- * @returns {{attrs: Object<string, any>, events: Object<string, Function>}} Processed attributes and events
+ * @param {JiccupRuntimeAttributes} rawAttrs - Raw attributes object
+ * @param {JiccupProcessingContext|null} context - Rendering context
+ * @returns {{attrs: JiccupRuntimeAttributes, events: Record<string, EventListener>}} Processed attributes and events
  */
 function processAttributes(rawAttrs, context) {
     const attrs = { ...rawAttrs };
@@ -840,9 +870,11 @@ function processAttributes(rawAttrs, context) {
 /**
  * Validate attribute value
  * @param {string} key - Attribute name
- * @param {any} value - Attribute value
+ * @param {unknown} value - Attribute value
  * @returns {boolean} true if attribute should be added
  * @throws {JiccupError} If undefined
+ * @param {string[]} [pathSegments] - 診断上の要素パス。
+ * @param {unknown} [rootElement] - 元入力。
  */
 function validateAttributeValue(key, value, pathSegments = [], rootElement = null) {
     throwIfUndefined(value, 'attribute', key, null, undefined, pathSegments, rootElement);
@@ -851,9 +883,11 @@ function validateAttributeValue(key, value, pathSegments = [], rootElement = nul
 
 /**
  * Append attributes to buffer
- * @param {Object<string, any>} attrs - Attributes object
- * @param {Array<string>} buffer - Buffer to accumulate HTML strings
+ * @param {JiccupRuntimeAttributes} attrs - Attributes object
+ * @param {unknown[]} buffer - Buffer to accumulate HTML strings
  * @returns {void}
+ * @param {string[]} [pathSegments] - 診断上の要素パス。
+ * @param {unknown} [rootElement] - 元入力。
  */
 function appendAttributes(attrs, buffer, pathSegments = [], rootElement = null) {
     for (const [key, value] of Object.entries(attrs)) {
@@ -876,17 +910,24 @@ function appendAttributes(attrs, buffer, pathSegments = [], rootElement = null) 
     }
 }
 
+/**
+ * @param {string[]} pathSegments - 属性を持つ要素のパス。
+ * @param {string} key - 属性名。
+ * @returns {string[]} 属性の診断パス。
+ */
 function buildAttributePath(pathSegments, key) {
-    const base = Array.isArray(pathSegments) && pathSegments.length > 0 ? pathSegments : ['root'];
+    const base = isUnknownArray(pathSegments) && pathSegments.length > 0 ? pathSegments : ['root'];
     return [...base, `@${key}`];
 }
 
 /**
  * Generate opening tag and append to buffer
  * @param {string} tagName - Tag name
- * @param {Object<string, any>} attrs - Attributes object
- * @param {Array<string>} buffer - Buffer to accumulate HTML strings
+ * @param {JiccupRuntimeAttributes} attrs - Attributes object
+ * @param {unknown[]} buffer - Buffer to accumulate HTML strings
  * @returns {void}
+ * @param {string[]} [pathSegments] - 診断上の要素パス。
+ * @param {unknown} [rootElement] - 元入力。
  */
 function appendOpenTag(tagName, attrs, buffer, pathSegments = [], rootElement = null) {
     buffer.push(CONSTANTS.TAG_OPEN, tagName);
@@ -899,7 +940,7 @@ function appendOpenTag(tagName, attrs, buffer, pathSegments = [], rootElement = 
 /**
  * Generate closing tag and append to buffer
  * @param {string} tagName - Tag name
- * @param {Array<string>} buffer - Buffer to accumulate HTML strings
+ * @param {unknown[]} buffer - Buffer to accumulate HTML strings
  * @returns {void}
  */
 function appendCloseTag(tagName, buffer) {
@@ -908,9 +949,9 @@ function appendCloseTag(tagName, buffer) {
 
 /**
  * Process child elements
- * @param {Array<any>} children - Array of child elements
- * @param {Array<string>} buffer - Buffer to accumulate HTML strings
- * @param {Object|null} context - Rendering context
+ * @param {unknown[]} children - Array of child elements
+ * @param {unknown[]} buffer - Buffer to accumulate HTML strings
+ * @param {JiccupProcessingContext|null} context - Rendering context
  * @param {number} depth - Current nesting depth
  * @returns {void}
  */
@@ -929,13 +970,24 @@ function processChildren(children, buffer, context, depth) {
     });
 }
 
+/**
+ * @param {string[]} parentPath - 親要素のパス。
+ * @param {unknown} child - 元の子入力。
+ * @param {number} index - 子の位置。
+ * @returns {string[]} 子の診断パス。
+ */
 function buildChildPath(parentPath, child, index) {
-    const normalizedParent = Array.isArray(parentPath) && parentPath.length > 0 ? parentPath : ['root'];
+    const normalizedParent = isUnknownArray(parentPath) && parentPath.length > 0 ? parentPath : ['root'];
     return [...normalizedParent, describeElementForPath(child, index)];
 }
 
+/**
+ * @param {unknown} element - 元の入力。
+ * @param {number} index - 子の位置。
+ * @returns {string} パス内の要素表記。
+ */
 function describeElementForPath(element, index) {
-    if (Array.isArray(element)) {
+    if (isUnknownArray(element)) {
         const head = element[0];
         if (typeof head === 'string') {
             return `${head}[${index}]`;
@@ -953,13 +1005,22 @@ function describeElementForPath(element, index) {
 
 /**
  * Register event bindings
- * @param {Object<string, Function>} events - Event handler map
- * @param {Object<string, any>} attrs - Attributes object
- * @param {Object|null} context - Rendering context
+ * @param {Record<string, EventListener>} events - Event handler map
+ * @param {JiccupRuntimeAttributes} attrs - Attributes object
+ * @param {JiccupProcessingContext|null} context - Rendering context
  * @returns {void}
  */
 function registerEventBindings(events, attrs, context) {
-    if (!context || Object.keys(events).length === 0) return;
+    if (Object.keys(events).length === 0) return;
+
+    // html の診断 context は描画能力ではない。イベントを落とさず typed failure にする。
+    if (!context || typeof context.nextId !== 'function' || !isUnknownArray(context.bindings)) {
+        throw new JiccupError(
+            'Cannot bind events with html(): this context has no event-binding capability. Use render(...).attach(container) to bind events.',
+            ERROR_CODES.INVALID_ELEMENT,
+            { events: Object.keys(events) }
+        );
+    }
     
     const id = context.nextId();
     attrs[CONSTANTS.DATA_ID] = id;
@@ -968,15 +1029,16 @@ function registerEventBindings(events, attrs, context) {
 
 /**
  * Process HTML tag
- * @param {Array<any>} element - Hiccup format element
- * @param {Array<string>} buffer - Buffer to accumulate HTML strings
- * @param {Object|null} context - Rendering context
+ * @param {[string, ...unknown[]]} element - 呼出し元で文字列先頭を検査した元の配列。
+ * @param {unknown[]} buffer - Buffer to accumulate HTML strings
+ * @param {JiccupProcessingContext|null} context - Rendering context
  * @param {number} depth - Current nesting depth
  * @returns {void}
  */
 function processHtmlTag(element, buffer, context, depth) {
     const first = element[0];
     const [tagName, attributes] = parseTag(first);
+    /** @type {JiccupRuntimeAttributes} */
     let attrs = { ...attributes };
     let childStartIndex = 1;
     
@@ -1016,9 +1078,9 @@ function processHtmlTag(element, buffer, context, depth) {
 
 /**
  * Process element and add to buffer with context
- * @param {any} element - Element to process
- * @param {Array<string>} buffer - Buffer to accumulate HTML strings
- * @param {Object|null} context - Rendering context (optional)
+ * @param {unknown} element - Element to process
+ * @param {unknown[]} buffer - Buffer to accumulate HTML strings
+ * @param {JiccupProcessingContext|null} context - Rendering context (optional)
  * @param {number} depth - Current nesting depth (default: 0)
  * @returns {void}
  * @throws {JiccupError} If maximum nesting depth exceeded
@@ -1051,7 +1113,7 @@ function processElementWithContext(element, buffer, context = null, depth = 0) {
     }
     
     // Ignore empty arrays
-    if (!Array.isArray(element) || element.length === 0) {
+    if (!isUnknownArray(element) || element.length === 0) {
         return;
     }
     
@@ -1063,7 +1125,7 @@ function processElementWithContext(element, buffer, context = null, depth = 0) {
     const first = element[0];
     
     // If first element is not a string, process as array auto-expansion
-    if (typeof first !== 'string') {
+    if (!hasStringHead(element, first)) {
         processChildren(element, buffer, effectiveContext, depth);
         return;
     }
@@ -1082,11 +1144,15 @@ function processElementWithContext(element, buffer, context = null, depth = 0) {
 /**
  * Get tag information from cache
  * @param {string} tag - Tag string
- * @returns {[string, Object<string, string>]|null} Cached result or null
+ * @returns {[string, Record<string, string>]|null} Cached result or null
  */
 function getCachedTag(tag) {
     if (!tagCache.has(tag)) return null;
     const cached = tagCache.get(tag);
+    // 存在する破損 entry を cache miss として再生成し、失敗を隠さない。
+    if (cached === undefined) {
+        throw new TypeError(`Cached tag "${tag}" has no value although the entry exists. Remove the corrupted cache entry before retrying.`);
+    }
     return [cached[0], { ...cached[1] }];
 }
 
@@ -1094,13 +1160,13 @@ function getCachedTag(tag) {
  * Save tag information to cache
  * @param {string} tag - Tag string
  * @param {string} tagName - Tag name
- * @param {Object<string, string>} attrs - Attributes object
+ * @param {Record<string, string>} attrs - Attributes object
  * @returns {void}
  */
 function setCachedTag(tag, tagName, attrs) {
     if (tagCache.size >= CONFIG.MAX_TAG_CACHE_SIZE) {
-        const firstKey = tagCache.keys().next().value;
-        tagCache.delete(firstKey);
+        const firstEntry = tagCache.keys().next();
+        if (!firstEntry.done) tagCache.delete(firstEntry.value);
     }
     tagCache.set(tag, [tagName, attrs]);
 }
@@ -1126,7 +1192,7 @@ function validateTagName(tagName) {
  * Parse tag string and split into tag name and attributes
  * Supports flexible CSS-style selectors with classes and ID in any order
  * @param {string} tag - Tag string (e.g., "div#id.class1.class2" or "div.class1.class2#id")
- * @returns {[string, Object<string, string>]} [tag name, attributes object]
+ * @returns {[string, Record<string, string>]} [tag name, attributes object]
  * @throws {JiccupError} If invalid format, multiple IDs, or spaces in tag
  */
 function parseTag(tag) {
@@ -1172,7 +1238,7 @@ function parseTag(tag) {
         );
     }
     
-    /** @type {Object<string, string>} */
+    /** @type {Record<string, string>} */
     const attrs = {};
     /** @type {string[]} */
     const classes = [];
@@ -1221,9 +1287,63 @@ function parseTag(tag) {
 
 
 /**
+ * property 読取と同じ boxing を行い、診断用 message を一度だけ読む。
+ * 任意 throw 値の constructor は読まず、nullish 値の読取失敗も維持する。
+ * @param {unknown} error - 診断作成中に捕捉した値。
+ * @returns {unknown} 元の message 値。
+ */
+function readDiagnosticMessage(error) {
+    if (error === null || error === undefined) {
+        throw new TypeError(`Cannot read properties of ${error} (reading 'message')`);
+    }
+    /** @type {object} */
+    const boxed = Object(error);
+    /** @type {unknown} */
+    const message = Reflect.get(boxed, 'message', error);
+    return message;
+}
+
+/**
+ * 先に読んだ head の判定を tuple の構造へ接続し、getter を追加で読まない。
+ * @param {unknown[]} element - 検査対象の元配列。
+ * @param {unknown} head - 呼出し元が読んだ先頭値。
+ * @returns {element is [string, ...unknown[]]} 文字列先頭か。
+ */
+function hasStringHead(element, head) {
+    return typeof head === 'string';
+}
+
+/**
+ * Array.isArray の実行時判定を保持し、境界内の各要素を unknown として扱う。
+ * @param {unknown} value - 未検証の入力。
+ * @returns {value is unknown[]} 配列であるか。
+ */
+function isUnknownArray(value) {
+    return Array.isArray(value);
+}
+
+/**
+ * component を呼ぶ前に関数であることを確かめ、戻値を再検証へ渡す。
+ * @param {unknown} value - component 候補。
+ * @returns {value is (props: JiccupRuntimeAttributes & {children: unknown[]}) => unknown} 呼出し可能か。
+ */
+function isRuntimeComponent(value) {
+    return typeof value === 'function';
+}
+
+/**
+ * render は既存の関数 handler を DOM に渡す。引数・戻値を共通 Function に消去しない。
+ * @param {unknown} value - handler 候補。
+ * @returns {value is EventListener} 関数 handler か。
+ */
+function isEventHandler(value) {
+    return typeof value === 'function';
+}
+
+/**
  * Check if plain object
- * @param {any} obj - Object to check
- * @returns {boolean} true if plain object
+ * @param {unknown} obj - Object to check
+ * @returns {obj is JiccupRuntimeAttributes} true if plain object
  */
 function isPlainObject(obj) {
     return obj !== null &&
@@ -1232,6 +1352,7 @@ function isPlainObject(obj) {
 }
 
 // Create Hiccup object
+/** @type {import('./types.js').JiccupApi} */
 const jiccup = {
     html,
     render,
@@ -1242,6 +1363,7 @@ const jiccup = {
     debugMode: false,
 
     // デバッグモード制御
+    /** @returns {import('./types.js').JiccupApi} デバッグを有効にした同じ API。 */
     enableDebugMode() {
         this.debugMode = true;
         if (typeof console !== 'undefined' && console.info) {
@@ -1250,6 +1372,7 @@ const jiccup = {
         return this;
     },
 
+    /** @returns {import('./types.js').JiccupApi} デバッグを無効にした同じ API。 */
     disableDebugMode() {
         this.debugMode = false;
         if (typeof console !== 'undefined' && console.info) {
@@ -1259,6 +1382,7 @@ const jiccup = {
     },
 
     // デバッグ情報取得
+    /** @returns {import('./types.js').JiccupDebugInfo} 現在の診断情報。 */
     getDebugInfo() {
         return {
             debugMode: this.debugMode,
@@ -1274,6 +1398,12 @@ const jiccup = {
     },
 
     // エラー報告機能
+    /**
+     * 診断対象と呼出し側の文脈を報告する。生成できない場合は既存の null 結果を返す。
+     * @param {unknown} element - 診断対象。
+     * @param {Record<string, unknown>} context - 呼出し側が保持する診断文脈。
+     * @returns {import('./types.js').JiccupErrorReport|null} 報告、または生成失敗。
+     */
     reportError(element, context = {}) {
         try {
             const error = new Error();
@@ -1305,6 +1435,11 @@ const jiccup = {
     },
 
     // Cleanup utility
+    /**
+     * 対象 container の内容を除去する。container の解決は attach と同じ境界を使う。
+     * @param {string|Element} container - Selector または DOM element。
+     * @returns {Element} 内容を除去した同じ container。
+     */
     cleanup(container) {
         const element = getContainer(container);
         element.innerHTML = ''; // This also removes existing event listeners

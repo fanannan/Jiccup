@@ -768,6 +768,107 @@ for (const kind of ['null', 'undefined', 'getter', 'self throw']) {
     });
 }
 
+import { __testExports } from './jiccup.js';
+
+// HTML の停止契約と render の既存イベント所有権を同じ公開境界で固定する。
+test('render preserves binding order, ids, handler identity and input attributes', () => {
+    const first = () => {};
+    const second = () => {};
+    const firstAttrs = Object.freeze({ 'on:click': first });
+    const secondAttrs = Object.freeze({ 'on:click': second });
+    const result = jiccup.render(['div', {},
+        ['button', firstAttrs, 'first'], ['button', secondAttrs, 'second']]);
+    assertEquals(result.bindings.length, 2);
+    assertEquals(result.bindings[0].id, `${__testExports.CONSTANTS.ID_PREFIX_TEMPLATE}1`);
+    assertEquals(result.bindings[1].id, `${__testExports.CONSTANTS.ID_PREFIX_TEMPLATE}2`);
+    assertEquals(result.bindings[0].events.click, first);
+    assertEquals(result.bindings[1].events.click, second);
+    assertEquals(firstAttrs['on:click'], first);
+    assertEquals(secondAttrs['on:click'], second);
+    assertEquals(Object.keys(firstAttrs).join(','), 'on:click');
+    assertEquals(Object.keys(secondAttrs).join(','), 'on:click');
+});
+
+test('html preserves the original attribute getter failure', () => {
+    const originalError = new Error('attribute getter failure');
+    const attrs = {};
+    Object.defineProperty(attrs, 'title', { enumerable: true, get() { throw originalError; } });
+    let didThrow = false;
+    let observed;
+    try { jiccup.html(['div', attrs]); } catch (error) { didThrow = true; observed = error; }
+    assert(didThrow && observed === originalError, 'HTML diagnostics must retain original cause identity');
+});
+
+test('html rejects event attributes with a typed error explaining render()', () => {
+    const handler = () => {};
+    const attrs = Object.freeze({ 'on:click': handler });
+    const input = ['button', attrs, 'click'];
+    let observed;
+    try { jiccup.html(input); } catch (error) { observed = error; }
+    assert(observed instanceof __testExports.JiccupError, 'HTML events must fail with JiccupError');
+    assertEquals(observed.code, __testExports.ERROR_CODES.INVALID_ELEMENT);
+    assert(/html/i.test(observed.message) && /render/i.test(observed.message)
+        && /(event|bind)/i.test(observed.message), 'error must explain HTML event failure and render repair');
+    assertEquals(attrs['on:click'], handler);
+    assertEquals(Object.keys(attrs).join(','), 'on:click');
+});
+
+// 存在する破損 cache を miss として再生成せず、既存の TypeError 停止を保つ。
+test('present undefined cache entries stop instead of being regenerated', () => {
+    const cache = __testExports.tagCache;
+    const tag = 'div';
+    const existed = cache.has(tag);
+    const previous = cache.get(tag);
+    cache.set(tag, undefined);
+    try {
+        let observed;
+        try { jiccup.html([tag, 'x']); } catch (error) { observed = error; }
+        assert(observed instanceof TypeError, 'corrupted cache must stop with TypeError');
+        assert(cache.has(tag) && cache.get(tag) === undefined, 'failed cache lookup must retain the corrupted entry');
+    } finally {
+        if (existed) cache.set(tag, previous);
+        else cache.delete(tag);
+    }
+});
+
+// primitive の property read は boxing 後も元の receiver を getter に渡す。
+test('diagnostic message getters preserve primitive receivers and getter failure identity', () => {
+    const saved = Object.getOwnPropertyDescriptor(String.prototype, 'message');
+    const primitiveFailure = 'primitive diagnostic failure';
+    const getterFailure = new Error('diagnostic getter failure');
+    try {
+        for (const throwsFromGetter of [false, true]) {
+            const receivers = [];
+            Object.defineProperty(String.prototype, 'message', {
+                configurable: true,
+                get() {
+                    receivers.push(this);
+                    if (throwsFromGetter) throw getterFailure;
+                    return typeof this === 'string' ? 'primitive-receiver' : 'boxed-receiver';
+                }
+            });
+            const children = [undefined];
+            children.slice = () => { throw primitiveFailure; };
+            const input = ['div', undefined];
+            input.slice = () => children;
+            let observed;
+            try { jiccup.html(input); } catch (error) { observed = error; }
+            assertEquals(receivers.length, 1, 'diagnostic message getter must be read once');
+            assertEquals(receivers[0], primitiveFailure, 'message getter must receive the original primitive');
+            if (throwsFromGetter) {
+                assertEquals(observed, getterFailure, 'diagnostic getter failure identity must survive');
+            } else {
+                assert(observed instanceof __testExports.JiccupError, 'undefined input must keep its typed failure');
+                assertEquals(observed.context.diagnostics.parent.error,
+                    'Failed to analyze parent element: primitive-receiver');
+            }
+        }
+    } finally {
+        if (saved) Object.defineProperty(String.prototype, 'message', saved);
+        else delete String.prototype.message;
+    }
+});
+
 // ============================================================================
 // Summary
 // ============================================================================
